@@ -1,0 +1,10 @@
+n: 3
+Profile Length: 1500
+Both/Eight_Days_A_Week.mid looks like a McCartney song!
+Both/From_Me_to_You.mid looks like a Lennon song!
+Both/I'll_Get_You.mid looks like a Lennon song!
+Both/I_Want_to_Hold_Your_Hand.mid looks like a Lennon song!
+Both/Little_Child.mid looks like a Lennon song!
+Both/Misery.mid looks like a Lennon song!
+Both/She_Loves_You.mid looks like a Lennon song!
+Both/Thank_You_Girl.mid looks like a McCartney song!

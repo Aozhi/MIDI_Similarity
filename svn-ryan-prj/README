@@ -1,0 +1,7 @@
+SVN Directory for Project: ryan-prj
+-----------------------------------
+Directory name: svn-ryan-prj
+Created on: Thu Nov 3, 2016
+
+For initial checkout, run:
+svn co svn+ssh://ryan-prj@ws.cs.dal.ca/home/ryan-prj/svn-rep/svn-ryan-prj

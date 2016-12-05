@@ -1,0 +1,255 @@
+Composer Recognition in Early Beatles Songs among McCartney and Lennon using
+CNG Similarity
+
+Ryan Hackett
+
+Abstract
+--------
+The purpose of this project was to to discern composer writing style via n-gram based analysis.
+This method uses MIDI file data to create profiles of composers (the profile of many songs 
+combined) which are all then compared with the profile of a single song, resulting in a 
+similarity measure, which is then used to discern which of the composers the song had been 
+most likely written by. This method was tested for accuracy on a collection of Paul McCartney 
+and John Lennon songs with great success. It was also applied to identify which of the two 
+artists contributed most to songs that were labelled to be written by both of them, also with
+great success.
+
+INTRODUCTION
+------------
+There are many ways that someone might try to discern the composer of a certain piece of music,
+as well as who the composer may have taken inspiration from. Someone who has listened to a lot 
+of music from a certain composer should easily be able to recognize a song from that composer 
+simply by listening. Similarity can be found by comparing many different parts of a musical 
+piece, whether it be a similar:
+-Chord progression
+-Melody
+-Time signature
+-Tempo
+-etc
+
+The method used in this project takes into account only the difference between adjacent notes 
+(the note_on midi events) in terms of pitch and duration.
+
+The goal of this project is to be able to recognize, from a collection of Beatles songs, which are 
+written in the style of Paul McCartney and which are in written in the style of John Lennon.
+
+RELATED WORK
+------------
+The basis of this project comes from two different papers. The method for creating tokens from 
+midi files is taken from the N-Gram-Based Approach To Composer Recognition by Jacek W., 
+Zbigniew K., and Vlado K. The method for creating profiles from tokens and finding similarity 
+between profiles is taken from the N-Gram-Based Author Profiles For Authorship Attribution by 
+Vlado K., Fuchen P., Nick C., and Calvin T.
+
+METHODOLOGY
+-----------
+#1 - Formula for obtaining tokens from two adjacent midi notes (MidiUtils.pm line 74-76):
+
+$token = "(".($secondNotePitch - $firstNotePitch).",".(&round(log($secondNoteDuration/
+$firstNoteDuration)/log(2))).")";
+
+
+#2 - Profiles are simply an occurrence count of tokens, with the calculated normalized frequency, 
+sorted by number of occurrences (tokens_to_profile.pl line 42-50):
+
+%occurrences = &CountOccurrences(@tokenArray);
+foreach my $ngram (sort { $occurrences{$b} <=> $occurrences{$a} } keys %occurrences) {
+	$normalizedFrequency = $occurrences{$ngram}/$numberOfTokens;
+    printf "$occurrences{$ngram} %.5f $ngram\n" , $normalizedFrequency;
+}
+
+
+#3 - CNG Distance Formula (for calculating similarity, Note: Actually calculates dissimilarity, 
+the inverse) (MyUtils.pm line 176):
+
+my $dissimilarity = 0
+foreach my $ngram (keys %profile1) 
+{
+	$frequencyOne = $profile1{$ngram};
+	if(exists $profile2{$ngram})
+	{
+		$frequencyTwo = $profile2{$ngram};
+	}
+	else
+	{
+		$frequencyTwo = 0;	
+	}
+	$dissimilarity+= (2*($frequencyOne-$frequencyTwo)/($frequencyOne + $frequencyTwo))**2;
+	delete $profile2{$ngram};
+}
+
+foreach my $ngram (keys %profile2)
+{
+	$frequencyOne = $profile2{$ngram};
+	if(exists $profile1{$ngram})
+	{
+		$frequencyTwo = $profile1{$ngram};
+	}
+	else
+	{
+		$frequencyTwo = 0;	
+	}
+	$dissimilarity+= (2*($frequencyOne-$frequencyTwo)/($frequencyOne + $frequencyTwo))**2;
+}
+
+IMPLEMENTATION DETAILS
+----------------------
+Similarity_Calculator/
+run.sh: A script for calculating a singlular dissimilarity between two groupings of midi 
+files. Files are read in two seperate input loops, profiles are created for the groupings, 
+then dissimilarity is calculated and displayed.
+
+accuracy_test.sh: The script for the accuracy test. It reads all midi files from the "Lennon" 
+and "McCartney" folders into two seperate arrays, lSongs and mSongs, which can then be iterated
+over. The process then proceeds as described in the Experiments section, where the n value is 
+the outer loop and the L value is the inner loop.
+
+identity_test.sh: The script file for the identity test. The code is mainly the same as in 
+accuracy_test.sh, except that the folder "Both" is also read into the array bSongs and the n
+and L values are fixed. Identity is found in the same way that the accuracy was tested. The 
+program tests which dissimilarity is lowest compared to the artist profiles and then echos
+the identity.
+
+
+Similarity_Calculator/Perl_Scripts
+MIDI.pm and MIDI folder: This is a library of perl modules by Sean M. Burke that allow many 
+different types of interaction with midi files. The functionality I used was 
+MIDI::Opus->new({'from_file' => filename}), which allows the reading of a midi file into
+an object-based structure. The layers of the structure where each layer is an array of the 
+next layer(outer to inner): 
+opus(a whole song)->tracks->events->event parameters
+
+midi_to_tokens.pl:This file prints the result of the GetTokensForFile method for each
+provided filename. See MidiUtils.pm for more on this method.
+
+MidiUtils.pm: Contains any methods which use the MIDI library by Sean M. Burke. The only 
+method that ended up here in the end was the GetTokensForFile method.
+
+GetTokensForFile: Walks through all events on all tracks of a song and picks out only the
+"note_on" events with delta time over 5. Note_on events represent the start of a note in
+the song and delta time represents how long the note lasts for (in ticks). When printing 
+out the event arrays of tracks, I noticed that there were a lot of notes that had delta 
+time of 0 or slightly greater. This seemed odd seeing as these notes would barely be
+audible or not even played at all. The midi files I downloaded had probably been 
+re-recorded by a third party either playing the music with midi instruments or using 
+software to create it from audio. One answer is that the music recorded by midi instruments 
+was quantized, a process that takes all notes on a track and snaps them to a grid, 
+forcing notes that aren't big enough for a single grid measurement to be squeezed to 
+0-length (or slightly bigger?). Another answer is the audio-to-midi software produced
+these artifacts. This seems like the most probable answer as the artifacts had varying
+lengths. Changing the code to filter out more or less artifacts could drastically change the
+result of the accuracy measure.
+
+All of the "real" note_on events are walked over and put through the token extraction formula 
+(see Methodology #1). This array of tokens is then formatted into 80 character lines and
+printed to file. Along with the tokens are lines indicating where the beginning of the song
+is, and where each track starts. Also, if a track lacks any note_on events, a line
+indicating a blank track will be printed. All lines without data start with an * for easy 
+parsing later.
+Note: Tracks without note_on events have other uses, such as meta data.
+
+tokens_to_profile.pl: This file starts off by reading tokens from a file into an array 
+(ReadTokensFromFile). They are then grouped into n-grams using TokensToNgrams, counted with 
+a counting hash (CountOccurrences), and printed to file by decreasing order of occurence with
+with the calculated normalized frequency added to each line.
+
+dissimilarity.pl: Prints the result of the CalcDissimilarity for two given filenames and an L 
+value. 
+
+MyUtils.pm: Please refer to the comments above and within each of the methods below in 
+Similarity_Calculator/Perl_Scripts/MyUtils.pm:
+
+-IsMIDIFile
+-TokensToNgrams
+-ReadTokensFromFile
+-round
+-CountOccurences
+-ArrayToOutputString
+-CalcDissimilarity
+-ReadProfileFromFile
+
+DATASET
+-------
+The MIDI files used in the project are made up of all of the Beatles songs from 1963-1964 
+either written by Paul McCartney, John Lennon, or both. Songs are taken from this time 
+period because McCartney and Lennon hadn't been writing together very long, and their
+writing styles were still quite distinct. Songs from later albums would feature more and
+more of a "mixed" style.
+
+It was important that the total size of the midi data used was equal for each artist, so 
+that the number of tokens produced was similar. Songs that are in the "Lennon" and "McCartney"
+folders were chosen because they each had a similar size to a song in the other folder, 
+so both folders are about 376kB in size. Both folders also have an equal number of songs for
+maximum accuracy. Songs that weren't chosen were put in the not_being_used folder. 
+
+All MIDI files were downloaded from: http://www.midiworld.com/files/995/
+
+Additional information about the dataset can be found in doc/MIDI_Fileset
+
+
+EXPERIMENTS
+-----------
+Accuracy Test: 
+This was an essential test of how accurate the similarity measure was. The idea
+was to test it at a series of different n values and L (profile length) values. For each of the
+n values, a profile was created for the entire McCartney folder and the entire Lennon folder.
+Then, at every profile length each song in both of the folders were made into profiles and then 
+compared with the artist profiles. If the song was most similar to its own artist, the measure
+was accurate. The accurate tests were then summed up and compared to the total number of songs to 
+produce a percentage.
+
+The test was very successful. It yielded 100% accuracy at most n values for profile lengths over
+1500. At n=3, 100% accuracy was achieved at the smallest profile length (700), making it the most
+accurate n value to use in future tests, such as the identity test.
+
+The results can be found in tabular form in Testing_Results_for_Accuracy.ods, and as raw program
+output in accuracyoutput.txt.
+
+Identity Test: 
+In my research into which artist wrote which songs, I found that a few of the songs 
+said to be written by both were labelled as being written by a specific artist on some websites. 
+These songs were "Little Child" and 'Misery", both supposedly being written by Lennon. This gave 
+me the idea to test all of the songs written by both to see which artist may have contributed more
+to each of them. I used n=3 and L=1500, as was determined to be the "peak" of accuracy in the 
+accuracy test.
+
+The results were interesting. Most of the songs seemed to be mainly written by Lennon, including 
+the two that were debated as being written by him.
+
+Output (also found in identityoutput.txt):
+Both/Eight_Days_A_Week.mid looks like a McCartney song!
+Both/From_Me_to_You.mid looks like a Lennon song!
+Both/I'll_Get_You.mid looks like a Lennon song!
+Both/I_Want_to_Hold_Your_Hand.mid looks like a Lennon song!
+Both/Little_Child.mid looks like a Lennon song!
+Both/Misery.mid looks like a Lennon song!
+Both/She_Loves_You.mid looks like a Lennon song!
+Both/Thank_You_Girl.mid looks like a McCartney song!
+
+CONCLUSION
+----------
+The tests that were run for this project were very successful. I was able to identify McCartney songs
+versus Lennon songs with great accuracy. I was then able to apply the process to identify which of the 
+two artists contributed most to the writing of certain songs.
+
+In the future, I could add the following work to the project:
+-Application of different Similarity Measures
+-Additional testing with more artists and new midi data
+-Adding musical meta data to the similarity calculation
+-Adjusting the threshold for note_on delta time to allow or dissallow more notes to be turned into 
+tokens
+
+REFERENCES
+----------
+- Perl MIDI Module collection by Seane M. Burke and Darrell Conklin 
+http://search.cpan.org/~conklin/MIDI-Perl-0.83/lib/MIDI.pm
+
+- Midi file downloads for Beatles music:
+http://www.midiworld.com/files/995/
+
+- N-Gram-Based Approach To Composer Recognition by Jacek W., 
+Zbigniew K., and Vlado K. - Found in /papers
+
+- N-Gram-Based Author Profiles For Authorship Attribution by 
+Vlado K., Fuchen P., Nick C., and Calvin T. - Found in /papers
+ 
